@@ -1,0 +1,50 @@
+name: File Tunnel polyglot client SDK matrix
+
+on:
+  workflow_dispatch:
+    inputs:
+      client_ref:
+        description: ftnl-clients git ref to validate
+        required: true
+        default: main
+        type: string
+  repository_dispatch:
+    types: [client-sdk-updated]
+  schedule:
+    - cron: "11 7 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: file-tunnel-polyglot-sdk-${{ inputs.client_ref || github.event.client_payload.client_ref || 'main' }}
+  cancel-in-progress: true
+
+jobs:
+  access:
+    runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.check.outputs.ready }}
+    steps:
+      - id: check
+        shell: bash
+        env:
+          SOURCE_IS_PUBLIC: "true"
+          CLIENT_SDK_READ_TOKEN: ${{ secrets.CLIENT_SDK_READ_TOKEN }}
+        run: |
+          if [[ "$SOURCE_IS_PUBLIC" == "true" || -n "$CLIENT_SDK_READ_TOKEN" ]]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Set CLIENT_SDK_READ_TOKEN with read access to file-tunnel/ftnl-clients to enable this matrix."
+          fi
+
+  sdk:
+    needs: access
+    if: needs.access.outputs.ready == 'true'
+    uses: zed-pkg-test/zed-pkg-e2e/.github/workflows/reusable-polyglot-sdk-matrix.yml@main
+    with:
+      client_repository: file-tunnel/ftnl-clients
+      client_ref: ${{ inputs.client_ref || github.event.client_payload.client_ref || 'main' }}
+    secrets:
+      CLIENT_SDK_READ_TOKEN: ${{ secrets.CLIENT_SDK_READ_TOKEN }}
