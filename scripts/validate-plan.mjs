@@ -15,8 +15,7 @@ for (const dependency of plan.imports ?? []) {
   if (!['git-submodule', 'zed', 'native-package'].includes(dependency.mode)) errors.push('unsupported dependency mode: ' + dependency.mode);
 }
 if (fs.existsSync(new URL('../.gitmodules', import.meta.url))) {
-  // Nested gitlinks are omitted by a non-recursive tree listing.
-  const tree = childProcess.execFileSync('git', ['ls-tree', '-r', 'HEAD'], { encoding: 'utf8' });
+  const tree = childProcess.execFileSync('git', ['ls-tree', 'HEAD'], { encoding: 'utf8' });
   for (const dependency of plan.imports.filter((item) => item.mode === 'git-submodule')) {
     if (!tree.includes('160000 commit') || !tree.includes(dependency.path)) errors.push('missing gitlink for ' + dependency.path);
   }
