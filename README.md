@@ -16,7 +16,7 @@ Source organization: `file-tunnel`
 
 | Source | Commit | Branch observed |
 |---|---:|---|
-| `file-tunnel/ftnl-clients` | `07f39d9c0a2006eda6068b476e692d0ec1fcddd7` | `main` |
+| `file-tunnel/ftnl-clients` | `12bfc301f74cf103478966ae58ed80375459bbb2` | `main` |
 
 ## Dependency lanes
 
