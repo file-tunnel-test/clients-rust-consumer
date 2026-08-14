@@ -42,7 +42,7 @@ jobs:
   sdk:
     needs: access
     if: needs.access.outputs.ready == 'true'
-    uses: zed-pkg-test/zed-pkg-e2e/.github/workflows/reusable-polyglot-sdk-matrix.yml@main
+    uses: zed-pkg-test/zed-pkg-e2e/.github/workflows/reusable-polyglot-sdk-matrix.yml@e0d2ff4d7d2962fdafdb936862d79ed6f5cfb096
     with:
       client_repository: file-tunnel/ftnl-clients
       client_ref: ${{ inputs.client_ref || github.event.client_payload.client_ref || 'main' }}
