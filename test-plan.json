@@ -25,7 +25,7 @@
       "fullName": "file-tunnel/ftnl-clients",
       "exists": true,
       "branch": "main",
-      "sha": "12bfc301f74cf103478966ae58ed80375459bbb2",
+      "sha": "f7522ca71c19dfd5c4830de85a311650f1a9e72e",
       "visibility": "public"
     }
   ],
@@ -50,6 +50,9 @@
     "immutableSourcePins": true,
     "pullRequestCredentials": false,
     "leastPrivilege": true,
-    "redactSecretsAndRawMedia": true
+    "redactSecretsAndRawMedia": true,
+    "protectedSourceIntegration": true,
+    "protectedSourceIntegrationStatus": "not-executed-unless-protected-lane-runs",
+    "productOverlayPreserved": true
   }
 }
