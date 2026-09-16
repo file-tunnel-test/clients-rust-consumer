@@ -11,7 +11,7 @@ mod tests {
     };
     use ores_middleware::{
         AuthDecision, IntegrationError, MiddlewareOrderPolicy, MiddlewareOrderingRule,
-        RequestMetadata, auth_provider_fn, validate_consumer_middleware_order,
+        RequestMetadata, auth_provider_fn, dyn_auth_provider, validate_consumer_middleware_order,
     };
     use ores_middleware::frameworks::axum_composable::{AuthLayerState, authenticate};
     use tower::{ServiceBuilder, ServiceExt};
@@ -51,6 +51,24 @@ mod tests {
         })
     }
 
+    fn tenant_provider() -> impl ores_middleware::StaticAuthVerifier {
+        auth_provider_fn(|request: RequestMetadata| async move {
+            let token = request.headers.get("authorization").cloned().ok_or_else(|| IntegrationError {
+                code: "missing_auth",
+                message: "authorization header is required".into(),
+            })?;
+            let (tenant, user) = token.split_once(':').ok_or_else(|| IntegrationError {
+                code: "malformed_auth",
+                message: "expected tenant:user".into(),
+            })?;
+            Ok(AuthDecision {
+                user_id: Some(user.to_owned()),
+                tenant_id: Some(tenant.to_owned()),
+                claims: BTreeMap::new(),
+            })
+        })
+    }
+
     #[tokio::test]
     async fn consumer_owned_sdk_is_injected_without_ores_middleware_owning_its_version() {
         let state = AuthLayerState::from_provider(provider());
@@ -77,6 +95,46 @@ mod tests {
         assert!(body.contains("authentication_failed"));
         assert!(!body.contains("provider_rejected"));
         assert!(!body.contains("private-key-id=42"));
+    }
+
+    #[tokio::test]
+    async fn consumer_can_choose_dynamic_dispatch_at_the_same_axum_boundary() {
+        let dynamic_provider = dyn_auth_provider(provider());
+        let state = AuthLayerState::from_provider(dynamic_provider);
+        let app = Router::new().route("/me", get(identity)).layer(
+            middleware::from_fn_with_state(state, authenticate),
+        );
+        let response = app.oneshot(
+            Request::builder().uri("/me").header("authorization", "sdk-v7:runtime-user").body(axum::body::Body::empty()).unwrap(),
+        ).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        assert_eq!(body.as_ref(), b"runtime-user:tenant-consumer");
+    }
+
+    #[tokio::test]
+    async fn concurrent_requests_keep_consumer_tenant_identity_isolated() {
+        let state = AuthLayerState::from_provider(tenant_provider());
+        let app = Router::new().route("/me", get(identity)).layer(
+            middleware::from_fn_with_state(state, authenticate),
+        );
+
+        let tenant_a = app.clone().oneshot(
+            Request::builder().uri("/me").header("authorization", "tenant-a:alice").body(axum::body::Body::empty()).unwrap(),
+        );
+        let tenant_b = app.oneshot(
+            Request::builder().uri("/me").header("authorization", "tenant-b:bob").body(axum::body::Body::empty()).unwrap(),
+        );
+        let (tenant_a, tenant_b) = tokio::join!(tenant_a, tenant_b);
+
+        let tenant_a = tenant_a.unwrap();
+        let tenant_b = tenant_b.unwrap();
+        assert_eq!(tenant_a.status(), StatusCode::OK);
+        assert_eq!(tenant_b.status(), StatusCode::OK);
+        let tenant_a = axum::body::to_bytes(tenant_a.into_body(), usize::MAX).await.unwrap();
+        let tenant_b = axum::body::to_bytes(tenant_b.into_body(), usize::MAX).await.unwrap();
+        assert_eq!(tenant_a.as_ref(), b"alice:tenant-a");
+        assert_eq!(tenant_b.as_ref(), b"bob:tenant-b");
     }
 
     #[test]
