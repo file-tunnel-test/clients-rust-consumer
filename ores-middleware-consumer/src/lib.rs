@@ -10,8 +10,9 @@ mod tests {
         routing::get,
     };
     use ores_middleware::{
-        AuthDecision, IntegrationError, MiddlewareOrderPolicy, MiddlewareOrderingRule,
-        RequestMetadata, auth_provider_fn, dyn_auth_provider, validate_consumer_middleware_order,
+        AuthDecision, AuthStage, IntegrationError, MiddlewareOrderPolicy, MiddlewareOrderingRule,
+        RequestContext, RequestMetadata, StageDecision, StageInput, auth_provider_fn,
+        dyn_auth_provider, validate_consumer_middleware_order,
     };
     use ores_middleware::frameworks::axum_composable::{AuthLayerState, authenticate};
     use tower::{ServiceBuilder, ServiceExt};
@@ -67,6 +68,30 @@ mod tests {
                 claims: BTreeMap::new(),
             })
         })
+    }
+
+    fn stage_input(token: &str) -> StageInput {
+        StageInput::new(
+            RequestMetadata {
+                method: "GET".into(),
+                path: "/account".into(),
+                headers: BTreeMap::from([("authorization".into(), token.into())]),
+                remote_ip: Some("127.0.0.1".into()),
+                content_length: None,
+                transport_secure: true,
+            },
+            RequestContext {
+                request_id: "external-test-1".into(),
+                trace_id: "0123456789abcdef0123456789abcdef".into(),
+                span_id: None,
+                tenant_id: None,
+                user_id: None,
+                locale: None,
+                started_at_unix_ms: 0,
+                deadline_unix_ms: None,
+                baggage: BTreeMap::new(),
+            },
+        )
     }
 
     #[tokio::test]
@@ -135,6 +160,20 @@ mod tests {
         let tenant_b = axum::body::to_bytes(tenant_b.into_body(), usize::MAX).await.unwrap();
         assert_eq!(tenant_a.as_ref(), b"alice:tenant-a");
         assert_eq!(tenant_b.as_ref(), b"bob:tenant-b");
+    }
+
+    #[tokio::test]
+    async fn auth_stage_keeps_external_consumer_provider_concrete_and_updates_context() {
+        let stage = AuthStage::from_provider("external-auth", provider());
+        match stage.evaluate(stage_input("sdk-v7:stage-user")).await {
+            StageDecision::Continue(input) => {
+                assert_eq!(input.context.user_id.as_deref(), Some("stage-user"));
+                assert_eq!(input.context.tenant_id.as_deref(), Some("tenant-consumer"));
+                assert!(input.context.baggage.is_empty());
+                assert!(input.attributes.is_empty());
+            }
+            _ => panic!("external auth stage should continue"),
+        }
     }
 
     #[test]
