@@ -30,7 +30,7 @@ mod tests {
         )
     }
 
-    fn provider() -> impl ores_middleware::StaticAuthVerifier {
+    fn provider() -> impl ores_middleware::StaticAuthVerifier + ores_middleware::AuthVerifier {
         let sdk = ConsumerPinnedAuthSdkV7 { accepted_prefix: "sdk-v7:" };
         auth_provider_fn(move |request: RequestMetadata| {
             let sdk = sdk.clone();
